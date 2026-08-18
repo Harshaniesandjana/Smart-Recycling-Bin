@@ -1,43 +1,175 @@
 import streamlit as st
+import json
+import os
+import hashlib
+from ultralytics import YOLO
 import cv2
 import numpy as np
-from ultralytics import YOLO
-import time
-import qrcode
-from io import BytesIO
+from PIL import Image
 
-# Load model
+# ============================================================
+# 1. DATABASE & LOGIN SYSTEM
+# ============================================================
+
+USERS_DB = "app/users.json"
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users():
+    if not os.path.exists(USERS_DB):
+        return {}
+    with open(USERS_DB, "r") as f:
+        return json.load(f)
+
+def save_users(users):
+    with open(USERS_DB, "w") as f:
+        json.dump(users, f, indent=4)
+
+def register_user(username, password):
+    users = load_users()
+    if username in users:
+        return False, "Gebruiker bestaat al."
+    users[username] = {
+        "password": hash_password(password),
+        "points": 0
+    }
+    save_users(users)
+    return True, "Account succesvol aangemaakt!"
+
+def login_user(username, password):
+    users = load_users()
+    if username not in users:
+        return False, "Gebruiker bestaat niet."
+    if users[username]["password"] != hash_password(password):
+        return False, "Wachtwoord is onjuist."
+    return True, users[username]
+
+def update_points(username, points):
+    users = load_users()
+    users[username]["points"] = points
+    save_users(users)
+
+# ============================================================
+# 2. LOGIN UI STYLING
+# ============================================================
+
+login_css = """
+<style>
+.login-container {
+    max-width: 420px;
+    margin: auto;
+    margin-top: 60px;
+    padding: 30px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0px 4px 18px rgba(0,0,0,0.12);
+}
+.login-title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #2ecc71;
+    margin-bottom: 10px;
+}
+.login-subtitle {
+    text-align: center;
+    font-size: 15px;
+    color: #555;
+    margin-bottom: 25px;
+}
+input[type=text], input[type=password] {
+    border-radius: 8px !important;
+    padding: 10px !important;
+    border: 1px solid #ccc !important;
+}
+.stButton>button {
+    width: 100%;
+    border-radius: 8px;
+    background-color: #2ecc71;
+    color: white;
+    padding: 10px;
+    font-size: 16px;
+    border: none;
+}
+.stButton>button:hover {
+    background-color: #27ae60;
+}
+</style>
+"""
+st.markdown(login_css, unsafe_allow_html=True)
+
+# ============================================================
+# 3. LOGIN LOGIC
+# ============================================================
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    st.markdown('<div class="login-title">Smart Recycling Bin</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-subtitle">Log in of maak een nieuw account</div>', unsafe_allow_html=True)
+
+    tab_login, tab_register = st.tabs(["🔐 Inloggen", "🆕 Registreren"])
+
+    with tab_login:
+        username = st.text_input("Gebruikersnaam")
+        password = st.text_input("Wachtwoord", type="password")
+
+        if st.button("Inloggen"):
+            success, data = login_user(username, password)
+            if success:
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.session_state.points = data["points"]
+                st.success(f"Ingelogd als {username}")
+            else:
+                st.error(data)
+
+    with tab_register:
+        new_user = st.text_input("Nieuwe gebruikersnaam")
+        new_pass = st.text_input("Nieuw wachtwoord", type="password")
+
+        if st.button("Account aanmaken"):
+            success, msg = register_user(new_user, new_pass)
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
+# ============================================================
+# 4. YOLO MODEL LADEN
+# ============================================================
+
 model = YOLO("runs/classify/train-7/weights/best.pt")
 
-# Mapping categories to bins
-CATEGORY_TO_BIN = {
-    "battery": "HAZARDOUS_BIN",
-    "biological": "ORGANIC_BIN",
-    "cardboard": "PAPER_BIN",
-    "clothes": "TEXTILE_BIN",
-    "glass": "GLASS_BIN",
-    "metal": "METAL_BIN",
-    "paper": "PAPER_BIN",
-    "plastic": "PLASTIC_BIN",
-    "shoes": "TEXTILE_BIN",
-    "trash": "GENERAL_WASTE_BIN"
-}
+LABELS = [
+    "battery", "biological", "cardboard", "clothes", "glass",
+    "metal", "paper", "plastic", "shoes", "trash"
+]
 
 BIN_COLORS = {
-    "HAZARDOUS_BIN": "#ff4d4d",
-    "ORGANIC_BIN": "#2ecc71",
-    "PAPER_BIN": "#3498db",
-    "TEXTILE_BIN": "#9b59b6",
-    "GLASS_BIN": "#1abc9c",
-    "METAL_BIN": "#e67e22",
-    "PLASTIC_BIN": "#f1c40f",
-    "GENERAL_WASTE_BIN": "#7f8c8d",
-    "UNKNOWN": "#000000"
+    "battery": "🔋",
+    "biological": "🌱",
+    "cardboard": "📦",
+    "clothes": "👕",
+    "glass": "🍾",
+    "metal": "🔧",
+    "paper": "📄",
+    "plastic": "🧴",
+    "shoes": "👟",
+    "trash": "🗑️"
 }
 
-# ---------------------------
-# BADGE SYSTEM
-# ---------------------------
+# ============================================================
+# 5. BADGE SYSTEM
+# ============================================================
+
 def get_badge(points):
     if points >= 1000:
         return "🔱 Diamond Recycler"
@@ -50,193 +182,59 @@ def get_badge(points):
     else:
         return "🥉 Bronze Recycler"
 
-# ---------------------------
-# QR LOGIN SYSTEM
-# ---------------------------
-if "user" not in st.session_state:
-    st.session_state.user = None
+# ============================================================
+# 6. APP INTERFACE
+# ============================================================
 
-if "points" not in st.session_state:
-    st.session_state.points = 0
+st.title("♻️ Smart Recycling Bin – AI Afval Classificatie")
 
-def generate_qr(user_id):
-    qr = qrcode.QRCode(box_size=10, border=2)
-    qr.add_data(user_id)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = BytesIO()
-    img.save(buf)
-    buf.seek(0)
-    return buf
+st.write(f"👤 Ingelogd als **{st.session_state.username}**")
+st.write(f"⭐ Punten: **{st.session_state.points}**")
+st.write(f"🏆 Badge: **{get_badge(st.session_state.points)}**")
 
-# ---------------------------
-# UI DESIGN (mobile-friendly)
-# ---------------------------
+mode = st.radio("Kies modus:", ["📸 Camera", "📤 Upload"])
 
-st.set_page_config(page_title="Smart Recycling Bin", layout="centered")
+# ============================================================
+# 7. CAMERA MODE
+# ============================================================
 
-st.markdown(
-    """
-    <style>
-    .main {
-        background-color: #f7f9fc;
-    }
-    .title {
-        text-align: center;
-        font-size: 36px;
-        font-weight: bold;
-        color: #2ecc71;
-        margin-bottom: 10px;
-    }
-    .subtitle {
-        text-align: center;
-        font-size: 18px;
-        color: #555;
-        margin-bottom: 30px;
-    }
-    .card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+if mode == "📸 Camera":
+    st.write("Live camera classificatie")
 
-st.markdown("<div class='title'>♻️ Smart Recycling Bin</div>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'>Recycle & verdien punten!</div>", unsafe_allow_html=True)
+    camera = st.camera_input("Maak een foto")
 
-# ---------------------------
-# LOGIN SECTION
-# ---------------------------
-st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("🔐 QR Login")
+    if camera:
+        img = Image.open(camera)
+        img_array = np.array(img)
 
-user_id_input = st.text_input("Voer jouw QR‑code in:")
+        results = model(img_array)
+        pred = results[0].probs.top1
+        label = LABELS[pred]
+        conf = float(results[0].probs.top1conf)
 
-if st.button("Login"):
-    if user_id_input.strip() != "":
-        st.session_state.user = user_id_input
-        st.success(f"Ingelogd als: {user_id_input}")
-    else:
-        st.error("QR‑code ongeldig.")
+        st.success(f"Herkenning: **{label}** ({conf:.2f}) {BIN_COLORS[label]}")
 
-if st.session_state.user:
-    st.info(f"Welkom terug, {st.session_state.user}!")
-else:
-    st.warning("Je bent nog niet ingelogd.")
-st.markdown("</div>", unsafe_allow_html=True)
+        st.session_state.points += 10
+        update_points(st.session_state.username, st.session_state.points)
 
-if not st.session_state.user:
-    st.stop()
+# ============================================================
+# 8. UPLOAD MODE
+# ============================================================
 
-# ---------------------------
-# POINTS + BADGE CARD
-# ---------------------------
-st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("🏆 Jouw punten")
-st.progress(min(st.session_state.points / 1000, 1.0))
-st.write(f"**Totaal punten:** {st.session_state.points}")
-st.write(f"**Badge:** {get_badge(st.session_state.points)}")
-st.markdown("</div>", unsafe_allow_html=True)
+if mode == "📤 Upload":
+    uploaded = st.file_uploader("Upload een afbeelding", type=["jpg", "png"])
 
-# ---------------------------
-# MODE SELECTOR
-# ---------------------------
-mode = st.radio("Kies modus:", ["📸 Live camera", "📤 Upload afbeelding"])
+    if uploaded:
+        img = Image.open(uploaded)
+        st.image(img, caption="Geüpload beeld")
 
-frame_placeholder = st.empty()
-label_placeholder = st.empty()
-bin_placeholder = st.empty()
-points_placeholder = st.empty()
+        img_array = np.array(img)
+        results = model(img_array)
+        pred = results[0].probs.top1
+        label = LABELS[pred]
+        conf = float(results[0].probs.top1conf)
 
-# ---------------------------
-# CLASSIFICATION FUNCTIONS
-# ---------------------------
-def classify_frame(frame):
-    results = model(frame)[0]
-    label_index = results.probs.top1
-    confidence = float(results.probs.top1conf)
-    label = model.names[label_index]
-    return label, confidence
+        st.success(f"Herkenning: **{label}** ({conf:.2f}) {BIN_COLORS[label]}")
 
-def decide_bin(label):
-    return CATEGORY_TO_BIN.get(label.lower(), "UNKNOWN")
-
-def add_points():
-    st.session_state.points += 10
-
-# ---------------------------
-# LIVE CAMERA MODE
-# ---------------------------
-if mode == "📸 Live camera":
-    run_stream = st.checkbox("Start live camera stream")
-
-    if run_stream:
-        cap = cv2.VideoCapture(0)
-
-        if not cap.isOpened():
-            st.error("Camera niet gevonden.")
-        else:
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("Kon geen frame lezen.")
-                    break
-
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(frame_rgb, caption="Live camera")
-
-                label, conf = classify_frame(frame_rgb)
-                assigned_bin = decide_bin(label)
-
-                st.markdown("<div class='card'>", unsafe_allow_html=True)
-                st.markdown(f"<h3>🔍 Herkenning: <b>{label}</b> ({conf:.2f})</h3>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                st.markdown("<div class='card'>", unsafe_allow_html=True)
-                st.markdown(
-                    f"<h3 style='color:{BIN_COLORS[assigned_bin]};'>🗑️ Afvalbak: {assigned_bin}</h3>",
-                    unsafe_allow_html=True
-                )
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                add_points()
-                points_placeholder.success(f"+10 punten! Totaal: {st.session_state.points}")
-
-                time.sleep(1)
-
-            cap.release()
-
-# ---------------------------
-# UPLOAD MODE
-# ---------------------------
-elif mode == "📤 Upload afbeelding":
-    uploaded_file = st.file_uploader("Upload een afbeelding", type=["jpg", "jpeg", "png"])
-
-    if uploaded_file is not None:
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        frame_placeholder.image(frame_rgb, caption="Geüploade afbeelding")
-
-        label, conf = classify_frame(frame_rgb)
-        assigned_bin = decide_bin(label)
-
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown(f"<h3>🔍 Herkenning: <b>{label}</b> ({conf:.2f})</h3>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown(
-            f"<h3 style='color:{BIN_COLORS[assigned_bin]};'>🗑️ Afvalbak: {assigned_bin}</h3>",
-            unsafe_allow_html=True
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        add_points()
-        points_placeholder.success(f"+10 punten! Totaal: {st.session_state.points}")
+        st.session_state.points += 10
+        update_points(st.session_state.username, st.session_state.points)
