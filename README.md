@@ -1,80 +1,94 @@
 # Smart Recycling Bin: AI‑gestuurde automatische afval detectie & scheiding
-De Smart Recycling Bin is een AI‑toepassing die automatisch afvalobjecten herkent en deze indeelt in de juiste afvalcategorie. Het systeem gebruikt YOLOv8‑classificatie, een camera, en een Streamlit‑interface om realtime afvalherkenning mogelijk te maken.
+
+De Smart Recycling Bin is een AI‑toepassing die automatisch afvalobjecten herkent en deze indeelt in de juiste afvalcategorie. Het systeem gebruikt **YOLOv8‑classificatie**, een **camera**, een **punten‑systeem**, **badges**, **QR‑login**, en een **mobiele‑vriendelijke Streamlit‑interface** om realtime afvalherkenning mogelijk te maken.
 
 Dit project is ontwikkeld voor Suriname, waar afvalbeheer en recycling een groeiende uitdaging vormen. Door middel van computer vision draagt dit systeem bij aan efficiëntere afvalscheiding en duurzaamheidsinitiatieven.
 
 ---
 
 ## Functionaliteiten
-1. AI‑Classificatie (YOLOv8n‑cls)
 
-**Herkent 10 afvalcategorieën:**
-- battery
-- biological
-- cardboard
-- clothes
-- glass
-- metal
-- paper
-- plastic
-- shoes
-- trash
+### 1. AI‑Classificatie (YOLOv8n‑cls)
+Herkenning van **10 afvalcategorieën**:
+- battery  
+- biological  
+- cardboard  
+- clothes  
+- glass  
+- metal  
+- paper  
+- plastic  
+- shoes  
+- trash  
 
-Model getraind op CPU met geoptimaliseerde instellingen. Automatische bak‑toewijzing op basis van categorie.
+Het model is getraind met YOLOv8‑classificatie en geoptimaliseerd voor CPU‑training.  
+Automatische bak‑toewijzing gebeurt op basis van categorie.
 
-**2. Live Camera Stream**
-- Realtime classificatie via webcam.
-- Continu updates van label + confidence.
-- Kleurcodes voor afvalbakken.
+---
 
-**3. Upload‑modus**
-- Upload een afbeelding (JPG/PNG).
-- Systeem classificeert het object.
-- Toont confidence + toegewezen afvalbak.
+### 2. Live Camera Stream
+- Realtime classificatie via webcam  
+- Continu updates van label + confidence  
+- Kleurcodes per afvalbak  
+- Mobiele‑vriendelijke interface  
 
-**4. Dataset**
-- Gestandaardiseerde dataset (256×256).
-- YOLOv8 maakt automatisch train/val splits.
-- Ondersteunt 10 klassen.
+---
 
-**5. CPU‑vriendelijke training**
-- **Optimalisatie:**
-    - epochs=15
-    - imgsz=192
-    - fraction=0.6
-    - batch=8
+### 3. Upload‑modus
+- Upload een afbeelding (JPG/PNG)  
+- Systeem classificeert het object  
+- Confidence + toegewezen afvalbak worden getoond  
 
-- **Fine‑tuning:**
-    - epochs=10
-    - imgsz=224
-    - fraction=1.0
+---
+
+### 4. Puntensysteem
+Gebruikers verdienen **10 punten per gerecycled object**.
+
+Punten worden opgeslagen in `st.session_state` per gebruiker.
+
+---
+
+### 5. Badge‑systeem
+Badges worden automatisch toegekend op basis van punten:
+
+| Badge | Punten | Emoji |
+|-------|--------|--------|
+| Bronze Recycler | 0–99 | 🥉 |
+| Silver Recycler | 100–249 | 🥈 |
+| Gold Recycler | 250–499 | 🥇 |
+| Platinum Recycler | 500–999 | 💎 |
+| Diamond Recycler | 1000+ | 🔱 |
+
+---
+
+### 6. QR‑code Login
+- Gebruiker scant een QR‑code met een unieke gebruikers‑ID  
+- Gebruiker voert de code in → app logt hem in  
+- Punten worden per gebruiker opgeslagen  
+- Later uitbreidbaar naar Firebase of database  
 
 ---
 
 ## Projectstructuur
-Smart Recycling Bin SR/
+
+```text
+smart-recycling-bin/
 │
 ├── app/
 │   └── streamlit_app.py
 │
-├── dataset/
-│   ├── original/
-│   ├── standardized_256/
-│   ├── standardized_256_split/
-│   ├── standardized_384/
-│   └── data.yaml (niet gebruikt voor classificatie)
-│
-│
 ├── runs/
 │   └── classify/
-│       └── train-5/
+│       └── train-7/
 │           └── weights/
-│               ├── best.pt
-│               └── last.pt
+│               └── best.pt
 │
 ├── sorter.py
+├── camera.py
 ├── requirements.txt
-└── README.md
+├── README.md
+└── .streamlit/
+    └── config.toml
 
 ---
 
@@ -105,7 +119,7 @@ yolo classify train data=dataset/standardized_256 model=runs/classify/train-5/we
 
 **Het uiteindelijke model staat in:**
 ```bash
-runs/classify/train-5/weights/best.pt
+runs/classify/train-7/weights/best.pt
 ```
 
 ---
@@ -120,7 +134,10 @@ streamlit run app/streamlit_app.py
 - Upload‑modus
 - Confidence‑score
 - Kleurcodes per afvalbak
-- Realtime classificatie
+- QR‑login
+- Puntensysteem
+- Badge‑systeem
+- Mobiele‑vriendelijke UI
 
 ---
 
@@ -165,17 +182,10 @@ streamlit run app/streamlit_app.py
 
 ## Bronnen
 - Suresur Green. (z.d.). Homepage. https://suresur.green/
-
 - Amazonia Recycling. (z.d.). Homepage. https://www.amazonarecycling.sr/
-
 - Green Circle. (z.d.). Homepage. https://www.green-circle.net/
-
 - Ministerie van Openbare Werken Suriname. (z.d.). Openbare Werken schaft vuilcontainers en afvalbakken aan. https://gov.sr/openbare-werken-schaft-vuilcontainers-en-afvalbakken-aan/
-
 - DB Suriname. (2024, 15 juni). De huidige uitdagingen in Suriname met betrekking tot afvalbeheer en recycling. https://www.dbsuriname.com/2024/06/15/de-huidige-uitdagingen-in-suriname-met-betrekking-tot-afvalbeheer-en-recycling/
-
 - DB Suriname. (2025, 16 april). Afvalrekken voor gebouwen of scholen: is dat wel een goed idee? https://www.dbsuriname.com/2025/04/16/afvalrekken-voor-gebouwen-of-scholen-is-dat-wel-een-goed-idee/
-
-- Chen, Z., Li, Y., & Wang, X. (2023). YOLOv8: A new state-of-the-art real-time object detector. arXiv. https://arxiv.org/abs/2302.02976
-
+- Chen, Z., Li, Y., & Wang, X. (2023). YOLOv8: A new state-of-the-art real-time object detector. arXiv. https://arxiv.org/abs/2302.02976        
 - Zhang, H., Wu, C., & Zhou, Y. (2020). Garbage classification using deep learning: A survey and benchmark. arXiv. https://arxiv.org/abs/2006.05873
