@@ -172,9 +172,9 @@ BIN_COLORS = {
 
 def get_badge(points):
     if points >= 1000:
-        return "🔱 Diamond Recycler"
+        return "💎 Diamond Recycler"
     elif points >= 500:
-        return "💎 Platinum Recycler"
+        return "🔱 Platinum Recycler"
     elif points >= 250:
         return "🥇 Gold Recycler"
     elif points >= 100:
